@@ -770,7 +770,7 @@ fn freeDeviceObjects(d: *Data) void {
 const AccShort = struct { need_mib: usize, slots: usize, slot_mib: usize, free_mib: usize };
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize, acc_short: *?AccShort) CreateError!*Data {
-    d.dev = try cu.Device.init(device_id);
+    d.dev = try cu.initDevice(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();
@@ -813,13 +813,13 @@ fn initCuda(d: *Data, device_id: i32, num_streams: usize, acc_short: *?AccShort)
             \\#define TRANSFORM_1D {s}
             \\
         , .{
-            e.key.w,                  e.key.h,               e.key.stride,
-            e.key.sigma[0],           e.key.sigma[1],        e.key.sigma[2],
-            e.key.block_step,         e.key.bm_range,        d.radius,
-            e.key.ps_num,             e.key.ps_range,        @intFromBool(d.radius > 0),
-            @intFromBool(d.chroma),   @intFromBool(d.final), extractor,
-            d.warps,                  e.key.proc_mask,
-            @tagName(e.key.bm_error), @tagName(e.key.t2d),   @tagName(e.key.t1d),
+            e.key.w,                e.key.h,               e.key.stride,
+            e.key.sigma[0],         e.key.sigma[1],        e.key.sigma[2],
+            e.key.block_step,       e.key.bm_range,        d.radius,
+            e.key.ps_num,           e.key.ps_range,        @intFromBool(d.radius > 0),
+            @intFromBool(d.chroma), @intFromBool(d.final), extractor,
+            d.warps,                e.key.proc_mask,       @tagName(e.key.bm_error),
+            @tagName(e.key.t2d),    @tagName(e.key.t1d),
         }) catch return error.OutOfMemory;
         defer allocator.free(defines);
 

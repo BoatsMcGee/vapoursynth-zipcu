@@ -89,13 +89,7 @@ fn getWindowValue(location: f64, size: i32, mode: i32, beta: f64) f64 {
             const v = 2.0 * location / size_f - 1.0;
             break :blk besselI0(math.pi * beta * @sqrt(1.0 - v * v)) / besselI0(math.pi * beta);
         },
-        5 => 0.27105140069342415
-            - 0.433297939234486060 * cos(2.0 * temp)
-            + 0.218122999543110620 * cos(4.0 * temp)
-            - 0.065925446388030898 * cos(6.0 * temp)
-            + 0.010811742098372268 * cos(8.0 * temp)
-            - 7.7658482522509342e-4 * cos(10.0 * temp)
-            + 1.3887217350903198e-5 * cos(12.0 * temp),
+        5 => 0.27105140069342415 - 0.433297939234486060 * cos(2.0 * temp) + 0.218122999543110620 * cos(4.0 * temp) - 0.065925446388030898 * cos(6.0 * temp) + 0.010811742098372268 * cos(8.0 * temp) - 7.7658482522509342e-4 * cos(10.0 * temp) + 1.3887217350903198e-5 * cos(12.0 * temp),
         6 => 0.2810639 - 0.5208972 * cos(2.0 * temp) + 0.1980399 * cos(4.0 * temp),
         7 => 1.0,
         8 => 1.0 - 2.0 * @abs(location - size_f / 2.0) / size_f,
@@ -811,7 +805,7 @@ fn free(instance_data: ?*anyopaque, _: ?*vs.Core, vsapi: ?*const vs.API) callcon
 }
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize, n_threads: usize, cfg: *KernelConfig) CreateError!*Data {
-    d.dev = try cu.Device.init(device_id);
+    d.dev = try cu.initDevice(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();

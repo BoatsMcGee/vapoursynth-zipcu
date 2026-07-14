@@ -1,4 +1,5 @@
-const std = @import("std");const vapoursynth = @import("vapoursynth");
+const std = @import("std");
+const vapoursynth = @import("vapoursynth");
 const cu = @import("cu.zig");
 const pool_mod = @import("pool.zig");
 const vsutil = @import("vsutil.zig");
@@ -614,7 +615,7 @@ fn freeStencilHost(d: *Data) void {
 }
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize) CreateError!*Data {
-    d.dev = try cu.Device.init(device_id);
+    d.dev = try cu.initDevice(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();

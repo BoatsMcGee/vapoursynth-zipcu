@@ -173,9 +173,9 @@ fn process(d: *Data, s: *Stream, src: ZFrame, dst: ZFrameW, seed: i32) CreateErr
     const a_iters: c_int = d.num_iterations;
     const a_seed: c_int = seed;
     const args = .{
-        a_dst,                a_src,        a_w,           a_h,               a_stride,
-        a_iters,              d.grain_radius_mean, d.grain_radius_std, d.sigma, a_seed,
-        d.d_lambda.ptr,       d.d_exp_lambda.ptr,  d.d_x_gaussian.ptr, d.d_y_gaussian.ptr,
+        a_dst,          a_src,               a_w,                a_h,                a_stride,
+        a_iters,        d.grain_radius_mean, d.grain_radius_std, d.sigma,            a_seed,
+        d.d_lambda.ptr, d.d_exp_lambda.ptr,  d.d_x_gaussian.ptr, d.d_y_gaussian.ptr,
     };
     try s.stream.launch(d.fn_grain, .{
         .grid = .{ ceilDiv(@intCast(d.w), 32), ceilDiv(@intCast(d.h), 4), 1 },
@@ -234,7 +234,7 @@ fn free(instance_data: ?*anyopaque, _: ?*vs.Core, vsapi: ?*const vs.API) callcon
 }
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize) CreateError!*Data {
-    d.dev = try cu.Device.init(device_id);
+    d.dev = try cu.initDevice(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();
