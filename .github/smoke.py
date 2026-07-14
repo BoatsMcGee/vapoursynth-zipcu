@@ -54,6 +54,7 @@ for line in result.stdout.splitlines():
         print(f"  {line}")
 
 plugin_path = installed_plugin_path()
+core = vs.core
 
 # Print all loaded plugins for diagnostics.
 print("Plugins loaded:")
