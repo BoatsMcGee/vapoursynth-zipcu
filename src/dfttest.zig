@@ -1204,7 +1204,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "DFTTest: invalid device ID.",
             error.Nvrtc => "DFTTest: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "DFTTest: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "DFTTest: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "DFTTest: out of device memory.",
             else => "DFTTest: CUDA initialization failed (see log).",
         });

@@ -633,7 +633,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
             error.BadBlockDims => "vszipcu.Bilateral: block_x*block_y exceeds the device's max threads per block.",
             error.FrameTooLarge => "vszipcu.Bilateral: frame too large (a plane exceeds 2^31 samples).",
             error.Nvrtc => "vszipcu.Bilateral: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "vszipcu.Bilateral: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "vszipcu.Bilateral: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "vszipcu.Bilateral: out of device memory.",
             else => "vszipcu.Bilateral: CUDA initialization failed (see log).",
         });

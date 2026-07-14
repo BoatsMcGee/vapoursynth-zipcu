@@ -368,7 +368,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "FGrain: invalid device ID.",
             error.Nvrtc => "FGrain: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "FGrain: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "FGrain: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "FGrain: out of device memory.",
             else => "FGrain: CUDA initialization failed (see log).",
         });

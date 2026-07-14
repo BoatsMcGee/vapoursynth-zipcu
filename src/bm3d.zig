@@ -1247,7 +1247,7 @@ fn createInner(
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "BM3D: invalid device ID.",
             error.Nvrtc => "BM3D: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "BM3D: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "BM3D: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "BM3D: out of device memory.",
             else => "BM3D: CUDA initialization failed (see log).",
         });

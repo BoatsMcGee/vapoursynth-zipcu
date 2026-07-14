@@ -887,7 +887,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "NNEDI3: invalid device ID.",
             error.Nvrtc => "NNEDI3: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "NNEDI3: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "NNEDI3: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "NNEDI3: out of device memory.",
             else => "NNEDI3: CUDA initialization failed (see log).",
         });

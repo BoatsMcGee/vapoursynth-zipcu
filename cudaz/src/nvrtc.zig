@@ -81,7 +81,7 @@ pub fn ensure(anchor: *const anyopaque, system_search: bool) Error!void {
         .anchor = anchor,
         .system_search = system_search,
     }) catch {
-        log.err("could not locate NVRTC ({s}); place it next to the plugin (wheel ships it)", .{names[0]});
+        log.err("could not locate NVRTC ({s}); try: pip install nvidia-cuda-nvrtc", .{names[0]});
         return error.NvrtcNotFound;
     };
 }

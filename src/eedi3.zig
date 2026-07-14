@@ -946,7 +946,7 @@ fn createImpl(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core_ptr: ?*vs.
             error.MdisTooLarge => "EEDI3: device max threads per block is too small for this mdis.",
             error.FrameTooLarge => "EEDI3: frame too large.",
             error.Nvrtc => "EEDI3: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "EEDI3: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "EEDI3: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "EEDI3: out of device memory.",
             else => "EEDI3: CUDA initialization failed (see log).",
         });

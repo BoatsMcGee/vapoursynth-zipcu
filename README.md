@@ -4,11 +4,10 @@ VapourSynth CUDA image processing, written in Zig.
 
 ## Requirements
 
-- An NVIDIA GPU + driver. (Only NNEDI3 cares about the architecture: its tensor-core
-  predictor needs sm_80+, and it falls back to an fp32 path automatically below that.)
-- **No CUDA toolkit at runtime.** Released wheels ship NVRTC (`nvrtc64_130_0` /
-  `libnvrtc.so.13` + builtins) next to the plugin. The host only needs the NVIDIA driver
-  (`nvcuda` / `libcuda`).
+- An NVIDIA GPU. (Only NNEDI3 cares about the architecture: its tensor-core predictor needs
+  sm_80+, and it falls back to an fp32 path automatically below that.)
+- **NVRTC at runtime:** plugin looks in exactly two places: its **own directory**, then the
+  **`nvidia-cuda-nvrtc` wheel** (`pip install nvidia-cuda-nvrtc`, CUDA 13.3+).
 
 ## Install
 
@@ -16,13 +15,13 @@ VapourSynth CUDA image processing, written in Zig.
 pip install vapoursynth-vszipcu        # released wheels (Windows / Linux x86_64)
 ```
 
-The wheel drops the plugin (and NVRTC) where VapourSynth autoloads it.
+The wheel drops the plugin where VapourSynth autoloads it and pulls `nvidia-cuda-nvrtc`
+automatically — no toolkit needed at runtime, just the NVIDIA driver.
 
 ## Build
 
 Directly from a clone, via Python (no local Zig needed — pip fetches the `ziglang` wheel;
-the CUDA **toolkit** must be installed and findable via `CUDA_PATH` so the build can
-compile against headers and **copy NVRTC into the install**):
+the CUDA **toolkit** must be installed and findable via `CUDA_PATH`):
 
 ```sh
 git clone https://github.com/dnjulek/vapoursynth-zipcu
@@ -30,9 +29,8 @@ cd vapoursynth-zipcu
 pip install .                          # build + install into site-packages
 ```
 
-The zig path leaves the DLL in `zig-out` — for a manual install, also copy
-`nvrtc64_130_0.dll` + `nvrtc-builtins64_130.dll` (Windows) or `libnvrtc.so*` +
-`libnvrtc-builtins.so*` (Linux) from the toolkit into the same plugin directory.
+The zig path leaves the DLL in `zig-out` — copy it to a VapourSynth plugin dir yourself
+(and keep NVRTC findable, see Requirements).
 
 ## Common arguments
 

@@ -1,6 +1,6 @@
 .{
     .name = .vszipcu,
-    .version = "1.1.0",
+    .version = "1.2.0",
     .fingerprint = 0x5060d0605c460ab4,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{

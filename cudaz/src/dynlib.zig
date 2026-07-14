@@ -17,6 +17,13 @@
 //!
 //! `PATH` and `%CUDA_PATH%` are deliberately NOT searched: a plugin that silently picks
 //! up whichever toolkit happens to be on PATH is a support nightmare.
+//!
+//! Companion DLLs (Windows): after opening a library by absolute path, NVRTC still does a
+//! bare-name `LoadLibrary("nvrtc-builtins64_*.dll")` which does **not** search the directory
+//! of the already-loaded module. If that bare name only resolves via PATH (e.g. a toolkit
+//! `bin\x64` entry), renaming or removing the toolkit breaks compile even though the pip
+//! wheel next to NVRTC has the right builtins. We pre-load same-directory companions
+//! (`nvrtc-builtins*`, `nvJitLink*`) so the bare name hits the already-mapped module.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -33,9 +40,27 @@ extern "kernel32" fn LoadLibraryW(lpLibFileName: [*:0]const u16) callconv(.winap
 extern "kernel32" fn GetProcAddress(hModule: windows.HMODULE, lpProcName: [*:0]const u8) callconv(.winapi) ?*anyopaque;
 extern "kernel32" fn GetModuleHandleExW(dwFlags: u32, lpModuleName: ?*const anyopaque, phModule: *?windows.HMODULE) callconv(.winapi) c_int;
 extern "kernel32" fn GetModuleFileNameW(hModule: ?windows.HMODULE, lpFilename: [*]u16, nSize: u32) callconv(.winapi) u32;
+extern "kernel32" fn FindFirstFileW(lpFileName: [*:0]const u16, lpFindFileData: *Win32FindDataW) callconv(.winapi) windows.HANDLE;
+extern "kernel32" fn FindNextFileW(hFindFile: windows.HANDLE, lpFindFileData: *Win32FindDataW) callconv(.winapi) c_int;
+extern "kernel32" fn FindClose(hFindFile: windows.HANDLE) callconv(.winapi) c_int;
 
 const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 0x4;
 const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT: u32 = 0x2;
+const INVALID_HANDLE_VALUE: windows.HANDLE = @ptrFromInt(std.math.maxInt(usize));
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+
+const Win32FindDataW = extern struct {
+    dwFileAttributes: u32,
+    ftCreationTime: windows.FILETIME,
+    ftLastAccessTime: windows.FILETIME,
+    ftLastWriteTime: windows.FILETIME,
+    nFileSizeHigh: u32,
+    nFileSizeLow: u32,
+    dwReserved0: u32,
+    dwReserved1: u32,
+    cFileName: [260]u16,
+    cAlternateFileName: [14]u16,
+};
 
 /// dladdr maps an address (one of our own functions) back to the shared object that
 /// contains it, which is how a plugin learns its own on-disk path. Declared here so we
@@ -79,7 +104,7 @@ pub fn moduleDir(anchor: *const anyopaque, buf: *[3072]u8) ?[]const u8 {
     }
 }
 
-pub fn openByPath(path: []const u8) ?Handle {
+fn loadLibraryPath(path: []const u8) ?Handle {
     if (builtin.os.tag == .windows) {
         var wide: [4096:0]u16 = undefined;
         // Output code units <= input bytes, so this pre-check bounds the conversion.
@@ -94,6 +119,63 @@ pub fn openByPath(path: []const u8) ?Handle {
         buf[path.len] = 0;
         return std.c.dlopen(buf[0..path.len :0].ptr, .{ .NOW = true });
     }
+}
+
+/// Pre-load NVRTC runtime companions that live next to `lib_path` so a later bare-name
+/// `LoadLibrary` from inside NVRTC resolves without PATH / CUDA_PATH.
+fn preloadCompanions(lib_path: []const u8) void {
+    if (builtin.os.tag != .windows) return;
+
+    const slash = std.mem.lastIndexOfAny(u8, lib_path, "\\/") orelse return;
+    const dir = lib_path[0..slash];
+    const main_name = lib_path[slash + 1 ..];
+
+    // Only relevant when loading NVRTC itself (or a sidecar that shares its dir).
+    if (!std.ascii.startsWithIgnoreCase(main_name, "nvrtc")) return;
+
+    // One scan with a broad glob; the precise (filesystem-semantics-independent) name
+    // match happens below in code.
+    var glob_buf: [3200]u8 = undefined;
+    const glob = std.fmt.bufPrint(&glob_buf, "{s}\\nv*", .{dir}) catch return;
+    var wide_glob: [4096:0]u16 = undefined;
+    if (glob.len >= wide_glob.len) return;
+    const gn = std.unicode.wtf8ToWtf16Le(&wide_glob, glob) catch return;
+    wide_glob[gn] = 0;
+
+    var data: Win32FindDataW = undefined;
+    const handle = FindFirstFileW(wide_glob[0..gn :0].ptr, &data);
+    if (handle == INVALID_HANDLE_VALUE) return;
+    defer _ = FindClose(handle);
+
+    while (true) {
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0) {
+            const name_len = std.mem.indexOfScalar(u16, &data.cFileName, 0) orelse data.cFileName.len;
+            // WTF-8 output needs up to 3 bytes per UTF-16 code unit (same contract as moduleDir).
+            var name_buf: [3 * 260]u8 = undefined;
+            const name = name_buf[0..std.unicode.wtf16LeToWtf8(&name_buf, data.cFileName[0..name_len])];
+            const companion = std.ascii.startsWithIgnoreCase(name, "nvrtc-builtins") or
+                std.ascii.startsWithIgnoreCase(name, "nvjitlink");
+            if (companion and !std.ascii.eqlIgnoreCase(name, main_name)) {
+                var sib_buf: [3200]u8 = undefined;
+                if (std.fmt.bufPrint(&sib_buf, "{s}\\{s}", .{ dir, name })) |sib| {
+                    _ = loadLibraryPath(sib);
+                } else |_| {}
+            }
+        }
+        if (FindNextFileW(handle, &data) == 0) break;
+    }
+}
+
+pub fn openByPath(path: []const u8) ?Handle {
+    const handle = loadLibraryPath(path) orelse return null;
+    // Pin companions only after the main library actually loaded from `path`, so a stray
+    // nvrtc-builtins in a candidate directory whose NVRTC was never opened is not picked
+    // up. NVRTC's bare-name load happens later (at compile time), not during LoadLibrary,
+    // so pinning after the open is safe. Bare names (system_search) have no directory.
+    if (std.mem.indexOfAny(u8, path, "\\/") != null) {
+        preloadCompanions(path);
+    }
+    return handle;
 }
 
 pub fn getProc(handle: Handle, sym: [*:0]const u8) ?*anyopaque {

@@ -506,7 +506,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core: ?*vs.Core
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "GaussBlur: invalid device ID.",
             error.Nvrtc => "GaussBlur: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "GaussBlur: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "GaussBlur: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "GaussBlur: out of device memory.",
             else => "GaussBlur: CUDA initialization failed (see log).",
         });

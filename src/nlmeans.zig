@@ -873,7 +873,7 @@ pub fn create(in: ?*const vs.Map, out: ?*vs.Map, _: ?*anyopaque, core_ptr: ?*vs.
         map_out.setError(switch (err) {
             error.InvalidDeviceID => "NLMeans: invalid device ID.",
             error.Nvrtc => "NLMeans: CUDA kernel compilation failed (see log).",
-            error.NvrtcNotFound => "NLMeans: could not locate NVRTC (wheel should ship nvrtc64_130_0.dll next to the plugin).",
+            error.NvrtcNotFound => "NLMeans: could not locate NVRTC (put nvrtc64_130_0.dll next to the plugin, or: pip install nvidia-cuda-nvrtc).",
             error.OutOfDeviceMemory => "NLMeans: out of device memory.",
             else => "NLMeans: CUDA initialization failed (see log).",
         });

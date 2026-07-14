@@ -8,7 +8,9 @@ description = "VapourSynth Zig Image Process — CUDA"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-dependencies = ["VapourSynth>=75"]
+# nvidia-cuda-nvrtc is the CUDA 13 NVRTC wheel; the plugin runtime-loads NVRTC from its
+# own directory or from this wheel's site-packages layout (see README "Requirements").
+dependencies = ["VapourSynth>=75", "nvidia-cuda-nvrtc>=13"]
 dynamic = ["version"]
 
 [tool.hatch.version]
@@ -41,7 +43,6 @@ exclude = [
 include = ["vapoursynth/plugins/vszipcu"]
 artifacts = [
     "vapoursynth/plugins/vszipcu/*.so",
-    "vapoursynth/plugins/vszipcu/*.so.*",
     "vapoursynth/plugins/vszipcu/*.dll",
     "vapoursynth/plugins/vszipcu/manifest.vs",
 ]
