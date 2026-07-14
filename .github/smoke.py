@@ -12,7 +12,9 @@ from site-packages — do not call LoadPlugin here.
 import glob
 import os
 import site
+import subprocess
 import sys
+import traceback
 
 import vapoursynth as vs
 
@@ -22,16 +24,48 @@ library_suffixes = {".so", ".dll"}
 def installed_plugin_path() -> str:
     for site_dir in site.getsitepackages() + ([site.getusersitepackages()] if site.getusersitepackages() else []):
         plugin_dir = os.path.join(site_dir, "vapoursynth", "plugins", "vszipcu")
+        print(f"  probing plugin dir: {plugin_dir}")
         for path in sorted(glob.glob(os.path.join(plugin_dir, "*"))):
+            print(f"    found: {path}")
             if os.path.isfile(path) and os.path.splitext(path)[1] in library_suffixes:
                 return path
     sys.exit("no vszipcu plugin in installed wheel (vapoursynth/plugins/vszipcu/)")
 
 
+print("=== smoke test start ===")
+
+# Print wheel metadata for debugging.
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "show", "vapoursynth-vszipcu"],
+    capture_output=True, text=True, check=False,
+)
+print(f"pip show vapoursynth-vszipcu (exit {result.returncode}):")
+for line in result.stdout.splitlines():
+    print(f"  {line}")
+
+# Print the NVRTC pip wheel that was pulled in.
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "list", "--format=columns"],
+    capture_output=True, text=True, check=False,
+)
+print("pip list (filtered for nvidia):")
+for line in result.stdout.splitlines():
+    if "nvidia" in line.lower() or "nvrtc" in line.lower():
+        print(f"  {line}")
+
 plugin_path = installed_plugin_path()
+
+# Print VapourSynth plugin search paths.
+print(f"vs.core.num_plugins(): {vs.core.num_plugins()}")
+
 core = vs.core
 
 if not hasattr(core, "vszipcu"):
+    # List what is loaded.
+    print("vszipcu NOT found in vs.core. Plugins loaded:")
+    for i in range(core.num_plugins()):
+        ns = core.get_plugin(i)
+        print(f"  [{i}] id={ns.id} namespace={ns.namespace} file={ns.filepath}")
     sys.exit(f"vszipcu not auto-loaded from installed wheel ({plugin_path})")
 
 print(f"  using installed wheel: {plugin_path}")
@@ -45,5 +79,9 @@ try:
 except vs.Error as e:
     # No driver/device on CI runners — creation must fail CLEANLY, not crash.
     print(f"  no GPU (expected on CI): clean error: {str(e).strip().splitlines()[-1]}")
+except Exception:
+    print("  unexpected error (not a VapourSynth error):")
+    traceback.print_exc()
+    sys.exit(1)
 
 print("smoke OK")
