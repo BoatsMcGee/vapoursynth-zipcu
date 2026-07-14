@@ -401,7 +401,7 @@ fn sameFormat(a: *const vs.VideoInfo, b: *const vs.VideoInfo) bool {
 }
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize) CreateError!*Data {
-    d.dev = try cu.initDevice(device_id);
+    d.dev = try cu.Device.init(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();

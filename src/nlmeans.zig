@@ -607,7 +607,7 @@ fn free(instance_data: ?*anyopaque, _: ?*vs.Core, vsapi: ?*const vs.API) callcon
 }
 
 fn initCuda(d: *Data, device_id: i32, num_streams: usize, n_threads: usize) CreateError!*Data {
-    d.dev = try cu.initDevice(device_id);
+    d.dev = try cu.Device.init(device_id);
     errdefer d.dev.deinit();
     try d.dev.push();
     defer d.dev.pop();

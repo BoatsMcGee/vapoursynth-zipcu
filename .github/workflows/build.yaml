@@ -225,6 +225,8 @@ jobs:
       # dlopen — point the loader at the toolkit's stub.
       - name: Smoke test (${{ matrix.target }}, CUDA ${{ matrix.cuda_major }})
         shell: bash
+        env:
+          CUDA_MAJOR: ${{ matrix.cuda_major }}
         run: |
           pip install VapourSynth numpy
           pip install wheelhouse/*.whl

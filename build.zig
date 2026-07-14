@@ -38,14 +38,6 @@ pub fn build(b: *std.Build) !void {
     mod.link_libc = true;
     mod.linkSystemLibrary("cuda", .{});
 
-    if (target.result.os.tag == .windows) {
-        // Delay-load nvcuda.dll (CUDA driver) on Windows so the plugin DLL loads
-        // without the NVIDIA driver present. The first CUDA driver function call
-        // (triggered by a filter create) goes through the delay-load thunk, which
-        // loads the library automatically when the driver IS available.
-        lib.addWin32DelayLoadLibrary("nvcuda.dll");
-    }
-
     if (target.result.os.tag == .linux) {
         mod.linkSystemLibrary("dl", .{}); // dynlib.zig uses dladdr
     }
