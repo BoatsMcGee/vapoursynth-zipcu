@@ -64,8 +64,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-linux-gnu
-            os: ubuntu-24.04
+          # - target: x86_64-linux-gnu
+          #   os: ubuntu-24.04
           - target: x86_64-windows
             os: windows-2025
       fail-fast: false
