@@ -8,10 +8,14 @@ description = "VapourSynth Zig Image Process — CUDA"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
-# nvidia-cuda-nvrtc is the CUDA 13 NVRTC wheel; the plugin runtime-loads NVRTC from its
-# own directory or from this wheel's site-packages layout (see README "Requirements").
-dependencies = ["VapourSynth>=75", "nvidia-cuda-nvrtc>=13"]
+# The NVRTC dependency is injected by hatch_build.py based on the CUDA_MAJOR env var
+# (default 13). See [project.optional-dependencies] for the concrete options.
+dependencies = ["VapourSynth>=75"]
 dynamic = ["version"]
+
+[project.optional-dependencies]
+cuda12 = ["nvidia-cuda-nvrtc-cu12"]
+cuda13 = ["nvidia-cuda-nvrtc>=13"]
 
 [tool.hatch.version]
 source = "regex"

@@ -8,6 +8,19 @@ from typing import Any
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from packaging import tags
 
+# CUDA major version — controls which NVRTC pip dependency is baked into the wheel.
+# Set via the CUDA_MAJOR env var (default "13"). CUDA 12 also appends "+cu12" to the
+# wheel version so both variants can coexist on PyPI.
+CUDA_MAJOR = os.environ.get("CUDA_MAJOR", "13")
+if CUDA_MAJOR not in ("12", "13"):
+    raise ValueError(f"CUDA_MAJOR must be 12 or 13, got {CUDA_MAJOR!r}")
+
+# Per-CUDA-major settings: pip dependency and optional version local suffix.
+CUDA_SETTINGS = {
+    "12": {"dep": "nvidia-cuda-nvrtc-cu12", "local": "+cu12"},
+    "13": {"dep": "nvidia-cuda-nvrtc>=13",   "local": ""},
+}
+
 # One entry per shipped wheel — CUDA exists on x86_64 Linux/Windows only. `zig_target`
 # pins glibc 2.17 (manylinux) resp. the msvc ABI (NVIDIA ships MSVC import libs; the gnu
 # ABI cannot link them); `platform_tag` is the wheel's platform tag; `os` selects the
@@ -38,6 +51,13 @@ class CustomHook(BuildHookInterface[Any]):
 
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         build_data["pure_python"] = False
+
+        # Inject the CUDA major-version-specific NVRTC dependency into wheel metadata.
+        cuda = CUDA_SETTINGS[CUDA_MAJOR]
+        build_data["dependencies"] = ["VapourSynth>=75", cuda["dep"]]
+        if cuda["local"]:
+            build_data["version"] = version + cuda["local"]
+
         self.target_dir.mkdir(parents=True, exist_ok=True)
 
         zig_cmd = [sys.executable, "-m", "ziglang", "build", "-Doptimize=ReleaseFast"]

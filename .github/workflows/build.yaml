@@ -53,6 +53,8 @@ jobs:
   # CUDA x86_64 Linux/Windows only. Building needs toolkit headers + link stubs
   # (cuda.h, libcuda.so stub / cuda.lib). NVRTC is runtime-loaded from the
   # nvidia-cuda-nvrtc PyPI dependency — nothing CUDA is vendored into the wheel.
+  #
+  # Two CUDA major versions: 13 (default, existing) and 12 (CUDA 12.9.2, +cu12 suffix).
   build-wheel:
     if: >-
       always() &&
@@ -66,17 +68,26 @@ jobs:
         include:
           - target: x86_64-linux-gnu
             os: ubuntu-24.04
+            cuda_major: "13"
           - target: x86_64-windows
             os: windows-2025
+            cuda_major: "13"
+          - target: x86_64-linux-gnu
+            os: ubuntu-24.04
+            cuda_major: "12"
+          - target: x86_64-windows
+            os: windows-2022
+            cuda_major: "12"
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
+      # -- CUDA 13 (Linux) ---------------------------------------------------
       # cuda-cudart-dev: cuda.h etc.; cuda-driver-dev: lib64/stubs/libcuda.so (the link
       # stub); cuda-nvrtc-dev: nvrtc.h. No runtime NVRTC package — that comes from PyPI.
-      - name: Setup CUDA (Linux)
-        if: runner.os == 'Linux'
+      - name: Setup CUDA 13 (Linux)
+        if: runner.os == 'Linux' && matrix.cuda_major == '13'
         run: |
           wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
           sudo dpkg -i cuda-keyring_1.1-1_all.deb
@@ -91,17 +102,31 @@ jobs:
             echo "CUDA_PATH=/usr/local/cuda" >> $GITHUB_ENV
           fi
 
-      - name: Cache CUDA (Windows)
-        if: runner.os == 'Windows'
-        id: cache-cuda
+      # -- CUDA 12 (Linux) ---------------------------------------------------
+      - name: Setup CUDA 12 (Linux)
+        if: runner.os == 'Linux' && matrix.cuda_major == '12'
+        run: |
+          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get install -y \
+            cuda-cudart-dev-12-9=12.9.2-1 \
+            cuda-driver-dev-12-9=12.9.2-1 \
+            cuda-nvrtc-dev-12-9=12.9.2-1
+          echo "CUDA_PATH=/usr/local/cuda-12.9" >> $GITHUB_ENV
+
+      # -- CUDA 13 (Windows cache + install + export) ------------------------
+      - name: Cache CUDA 13 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '13'
+        id: cache-cuda-13
         uses: actions/cache@v5
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
           # Toolkit 13.3.1 headers/stubs for the build. Full package set required (slim install exit 9).
           key: ${{ runner.os }}-cuda-13.3.1-nvcc-cudart-nvrtc-dev-crt-v1
 
-      - name: Setup CUDA (Windows)
-        if: runner.os == 'Windows' && steps.cache-cuda.outputs.cache-hit != 'true'
+      - name: Setup CUDA 13 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '13' && steps.cache-cuda-13.outputs.cache-hit != 'true'
         shell: cmd
         run: |
           curl -fL -o cuda_installer.exe https://developer.download.nvidia.com/compute/cuda/13.3.1/network_installers/cuda_13.3.1_windows_network.exe
@@ -113,26 +138,57 @@ jobs:
             exit /b 1
           )
 
-      - name: Export CUDA_PATH (Windows)
-        if: runner.os == 'Windows'
+      - name: Export CUDA_PATH 13 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '13'
         shell: bash
         run: |
           cuda_root='C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3'
           test -f "/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include/cuda.h"
           echo "CUDA_PATH=$cuda_root" >> "$GITHUB_ENV"
 
+      # -- CUDA 12 (Windows cache + install + export) ------------------------
+      - name: Cache CUDA 12 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '12'
+        id: cache-cuda-12
+        uses: actions/cache@v5
+        with:
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
+          key: ${{ runner.os }}-cuda-12.9.2-nvcc-cudart-nvrtc-dev-crt-v1
+
+      - name: Setup CUDA 12 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '12' && steps.cache-cuda-12.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          curl -fL -o cuda_installer.exe https://developer.download.nvidia.com/compute/cuda/12.9.2/network_installers/cuda_12.9.2_windows_network.exe
+          if not exist cuda_installer.exe exit /b 1
+          cuda_installer.exe -s nvcc_12.9 cudart_12.9 nvrtc_dev_12.9 crt_12.9 nvptxcompiler_12.9 nvvm_12.9
+          if errorlevel 1 exit /b %ERRORLEVEL%
+          if not exist "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\include\cuda.h" (
+            echo cuda.h missing after install
+            exit /b 1
+          )
+
+      - name: Export CUDA_PATH 12 (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '12'
+        shell: bash
+        run: |
+          cuda_root='C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9'
+          test -f "/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9/include/cuda.h"
+          echo "CUDA_PATH=$cuda_root" >> "$GITHUB_ENV"
+
       - name: Build wheel
         shell: bash
         env:
           ZTARGET: ${{ matrix.target }}
+          CUDA_MAJOR: ${{ matrix.cuda_major }}
         run: |
           pip install build
           python -m build --wheel --outdir dist
 
       # No auditwheel repair: the wheel's only external CUDA library is libcuda.so.1 —
       # the DRIVER, which must come from the host and must never be vendored. NVRTC is
-      # a separate pip dependency (nvidia-cuda-nvrtc). manylinux_2_17 is asserted by the
-      # build hook (glibc pinned via the zig target).
+      # a separate pip dependency (nvidia-cuda-nvrtc / nvidia-cuda-nvrtc-cu12).
+      # manylinux_2_17 is asserted by the build hook (glibc pinned via the zig target).
       - name: Collect wheel
         shell: bash
         run: |
@@ -143,7 +199,7 @@ jobs:
       # the plugin autoloads, and filter creation fails with a clean VapourSynth error
       # (not a crash). Linux needs a libcuda.so.1 to satisfy the plugin's DT_NEEDED at
       # dlopen — point the loader at the toolkit's stub.
-      - name: Smoke test (${{ matrix.target }})
+      - name: Smoke test (${{ matrix.target }}, CUDA ${{ matrix.cuda_major }})
         shell: bash
         run: |
           pip install VapourSynth numpy
@@ -159,7 +215,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: vapoursynth-vszipcu-${{ matrix.target }}
+          name: vapoursynth-vszipcu-${{ matrix.target }}-cu${{ matrix.cuda_major }}
           path: wheelhouse/*.whl
 
   # PyPI publish + GitHub release, only when this version has not been released yet. The release
