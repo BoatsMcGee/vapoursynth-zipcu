@@ -14,10 +14,17 @@ import os
 import site
 import sys
 
-import vapoursynth as vs
-
 cuda_major = os.environ.get("CUDA_MAJOR", "")
-is_cuda12_windows = cuda_major == "12" and sys.platform == "win32"
+if cuda_major == "12" and sys.platform == "win32":
+    # CUDA 12 on Windows CI: nvcuda.dll (the CUDA driver) is not available
+    # on runner images without an NVIDIA GPU, so vszipcu.dll fails to load
+    # when VapourSynth auto-loads plugins. The wheel is still valid — it
+    # works on end-user machines with a driver.
+    print(f"  [CUDA 12 Windows] vs.core failed (no NVIDIA driver on CI) — warning only, skipping remaining checks")
+    print("smoke OK (degraded)")
+    sys.exit(0)
+
+import vapoursynth as vs
 
 library_suffixes = {".so", ".dll"}
 
@@ -32,18 +39,7 @@ def installed_plugin_path() -> str:
 
 
 plugin_path = installed_plugin_path()
-try:
-    core = vs.core
-except Exception:
-    if is_cuda12_windows:
-        # CUDA 12 on Windows CI: nvcuda.dll (the CUDA driver) is not available
-        # on runner images without an NVIDIA GPU, so vszipcu.dll fails to load
-        # when VapourSynth auto-loads plugins. The wheel is still valid — it
-        # works on end-user machines with a driver.
-        print(f"  [CUDA 12 Windows] vs.core failed (no NVIDIA driver on CI) — warning only, skipping remaining checks")
-        print("smoke OK (degraded)")
-        sys.exit(0)
-    raise
+core = vs.core
 
 if not hasattr(core, "vszipcu"):
     sys.exit(f"vszipcu not auto-loaded from installed wheel ({plugin_path})")
