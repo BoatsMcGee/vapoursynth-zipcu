@@ -110,9 +110,9 @@ jobs:
           sudo dpkg -i cuda-keyring_1.1-1_all.deb
           sudo apt-get update
           sudo apt-get install -y \
-            cuda-cudart-dev-12-9=12.9.2-1 \
-            cuda-driver-dev-12-9=12.9.2-1 \
-            cuda-nvrtc-dev-12-9=12.9.2-1
+            cuda-cudart-dev-12-9 \
+            cuda-driver-dev-12-9 \
+            cuda-nvrtc-dev-12-9
           echo "CUDA_PATH=/usr/local/cuda-12.9" >> $GITHUB_ENV
 
       # -- CUDA 13 (Windows cache + install + export) ------------------------
@@ -147,34 +147,58 @@ jobs:
           echo "CUDA_PATH=$cuda_root" >> "$GITHUB_ENV"
 
       # -- CUDA 12 (Windows cache + install + export) ------------------------
+      - name: Configure CUDA 12 Path (Windows)
+        if: runner.os == 'Windows' && matrix.cuda_major == '12'
+        shell: pwsh
+        run: |
+          $cudaShort = "12.9"
+          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v$cudaShort"
+          "CUDA_PATH=$cudaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$cudaPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Cache CUDA 12 (Windows)
         if: runner.os == 'Windows' && matrix.cuda_major == '12'
         id: cache-cuda-12
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
-          key: ${{ runner.os }}-cuda-12.9.2-nvcc-cudart-nvrtc-dev-crt-v1
+          key: ${{ runner.os }}-cuda-12.9.2-local-install-v1
 
       - name: Setup CUDA 12 (Windows)
         if: runner.os == 'Windows' && matrix.cuda_major == '12' && steps.cache-cuda-12.outputs.cache-hit != 'true'
-        shell: cmd
+        shell: pwsh
         run: |
-          curl -fL -o cuda_installer.exe https://developer.download.nvidia.com/compute/cuda/12.9.2/network_installers/cuda_12.9.2_windows_network.exe
-          if not exist cuda_installer.exe exit /b 1
-          cuda_installer.exe -s nvcc_12.9 cudart_12.9 nvrtc_dev_12.9 crt_12.9 nvptxcompiler_12.9 nvvm_12.9
-          if errorlevel 1 exit /b %ERRORLEVEL%
-          if not exist "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\include\cuda.h" (
-            echo cuda.h missing after install
-            exit /b 1
-          )
+          $installerUrl = "https://developer.download.nvidia.com/compute/cuda/12.9.2/local_installers/cuda_12.9.2_576.57_windows.exe"
+          Write-Host "Downloading CUDA 12.9.2 local installer from: $installerUrl"
+          curl.exe -s -o cuda_installer.exe -L $installerUrl
 
-      - name: Export CUDA_PATH 12 (Windows)
-        if: runner.os == 'Windows' && matrix.cuda_major == '12'
-        shell: bash
-        run: |
-          cuda_root='C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9'
-          test -f "/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9/include/cuda.h"
-          echo "CUDA_PATH=$cuda_root" >> "$GITHUB_ENV"
+          if (-not (Test-Path cuda_installer.exe) -or (Get-Item cuda_installer.exe).Length -lt 1MB) {
+            Write-Error "Failed to download CUDA installer. The file is missing or too small."
+            exit 1
+          }
+
+          $fileSizeMB = [math]::Round((Get-Item cuda_installer.exe).Length / 1MB, 1)
+          Write-Host "Downloaded installer size: ${fileSizeMB} MB"
+
+          # Local installer: full install with -s flag (component selection fails for local installer)
+          Write-Host "Installing CUDA with args: -s"
+          $proc = Start-Process ./cuda_installer.exe -ArgumentList "-s" -Wait -PassThru
+          Write-Host "Installer exit code: $($proc.ExitCode)"
+
+          # Verify
+          $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9"
+          if (-not (Test-Path "$cudaPath\include\cuda.h")) {
+            Write-Error "cuda.h missing after install at $cudaPath"
+            exit 1
+          }
+          Write-Host "CUDA 12.9.2 installed successfully at: $cudaPath"
+
+      - name: Cache CUDA 12 (Windows) — save
+        if: runner.os == 'Windows' && matrix.cuda_major == '12' && steps.cache-cuda-12.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
+          key: ${{ runner.os }}-cuda-12.9.2-local-install-v1
 
       - name: Build wheel
         shell: bash
