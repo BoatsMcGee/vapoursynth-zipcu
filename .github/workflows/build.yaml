@@ -76,7 +76,7 @@ jobs:
             os: ubuntu-24.04
             cuda_major: "12"
           - target: x86_64-windows
-            os: windows-2022
+            os: windows-2025
             cuda_major: "12"
       fail-fast: false
     runs-on: ${{ matrix.os }}
