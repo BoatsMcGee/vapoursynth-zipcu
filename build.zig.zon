@@ -1,0 +1,17 @@
+.{
+    .name = .vszipcu,
+    .version = "1.0.0",
+    .fingerprint = 0x5060d0605c460ab4,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .cudaz = .{
+            .path = "./cudaz/",
+        },
+        .vapoursynth = .{
+            // zig fetch --save git+https://github.com/dnjulek/vapoursynth-zig.git
+            .url = "git+https://github.com/dnjulek/vapoursynth-zig.git#b87ff61ce680fa5a4cf7d44a9cb4b605c5037432",
+            .hash = "vapoursynth-4.0.0-jLYMQ6DjAgDFOODh8tdhWCw0iGHMPKiR4znTJwSyvV36",
+        },
+    },
+    .paths = .{"."},
+}

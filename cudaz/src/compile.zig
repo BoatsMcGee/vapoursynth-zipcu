@@ -1,0 +1,163 @@
+const std = @import("std");
+const nvrtc = @import("c.zig").nvrtc;
+const PTX = struct { compiled_code: [][]const u8, allocator: std.mem.Allocator };
+const Path = std.fs.path;
+const Error = @import("error.zig");
+const CompileError = std.mem.Allocator.Error || Error.NvrtcError.Error || error{StreamTooLong};
+
+const Options = struct {
+    ftz: ?bool = null,
+    prec_sqrt: ?bool = null,
+    prec_div: ?bool = null,
+    use_fast_math: ?bool = null,
+    /// mul+add contraction. Distinct from use_fast_math, and load-bearing for
+    /// bit-exactness against a reference whose compiler made a particular choice.
+    fmad: ?bool = null,
+    maxrregcount: ?usize = null,
+    include_paths: [][]const u8 = &[_][]const u8{},
+    arch: [][]const u8 = &[_][]const u8{},
+    macro: [][]const u8 = &[_][]const u8{},
+
+    fn to_params(self: @This(), allocator: std.mem.Allocator) CompileError!std.ArrayList([]const u8) {
+        var arr = std.ArrayList([]const u8).empty;
+        // helper variables
+        var tmp: []u8 = undefined;
+        var sentinel: []u8 = undefined;
+
+        if (self.ftz) |field| {
+            tmp = try std.fmt.allocPrint(allocator, "--ftz={any}", .{field});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        if (self.prec_sqrt) |field| {
+            tmp = try std.fmt.allocPrint(allocator, "--prec-sqrt={any}", .{field});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        if (self.prec_div) |field| {
+            tmp = try std.fmt.allocPrint(allocator, "--prec-div={any}", .{field});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        // `--use_fast_math`, not `--fmad`: they are different options with different
+        // meanings (fmad only controls mul+add contraction; use_fast_math additionally
+        // turns on FTZ and the approximate div/sqrt/transcendentals). Emitting `--fmad`
+        // here silently gave you NEITHER, which is a parity bug for any port whose
+        // reference was built with fast math.
+        if (self.use_fast_math) |field| {
+            if (field) {
+                const param = try allocator.dupeZ(u8, "--use_fast_math");
+                try arr.append(allocator, @as([]const u8, param[0 .. param.len + 1]));
+            }
+        }
+        if (self.fmad) |field| {
+            tmp = try std.fmt.allocPrint(allocator, "--fmad={any}", .{field});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        if (self.maxrregcount) |field| {
+            tmp = try std.fmt.allocPrint(allocator, "--maxrregcount={d}", .{field});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        for (self.arch) |arch| {
+            tmp = try std.fmt.allocPrint(allocator, "-arch={s}", .{arch});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        for (self.macro) |macro| {
+            tmp = try std.fmt.allocPrint(allocator, "--define-macro={s}", .{macro});
+            const param = try allocator.alloc(u8, tmp.len + 1);
+            std.mem.copyForwards(u8, param[0..tmp.len], tmp);
+            param[tmp.len] = 0;
+            try arr.append(allocator, @as([]const u8, param[0 .. tmp.len + 1]));
+            allocator.free(tmp);
+        }
+        for (self.include_paths) |path| {
+            tmp = try std.fmt.allocPrint(allocator, "--include-path={s}", .{path});
+            sentinel = try allocator.allocSentinel(u8, tmp.len, 0);
+            std.mem.copyForwards(u8, sentinel[0..tmp.len], tmp);
+            try arr.append(allocator, @as([]const u8, sentinel));
+            allocator.free(tmp);
+            // NOTE: `sentinel` is NOT freed here — it was just appended to `arr`, and the
+            // caller frees every element. Freeing it here handed NVRTC a dangling option
+            // string (the previous code did exactly that).
+        }
+        return arr;
+    }
+};
+pub fn cudaText(cuda_text: []const u8, options: ?Options, allocator: std.mem.Allocator) CompileError![:0]const u8 {
+    var program: nvrtc.nvrtcProgram = undefined;
+    try Error.fromNvrtcErrorCode(nvrtc.nvrtcCreateProgram(&program, cuda_text.ptr, null, 0, null, null));
+    try cudaProgram(program, options, allocator);
+    const ptx_data = try getPtx(program, allocator);
+    return ptx_data;
+}
+pub fn cudaFile(cuda_path: std.Io.File, io: std.Io, options: ?Options, allocator: std.mem.Allocator) ![:0]const u8 {
+    const cuda_file_buffer = try allocator.alloc(u8, 1024 * 1024);
+    defer allocator.free(cuda_file_buffer);
+    const n_read_bytes = try cuda_path.readPositionalAll(io, cuda_file_buffer, 0);
+    cuda_file_buffer[n_read_bytes] = 0;
+    const data_with_zero = cuda_file_buffer[0 .. n_read_bytes + 1];
+
+    return try cudaText(data_with_zero, options, allocator);
+}
+
+pub fn cudaProgram(prg: nvrtc.nvrtcProgram, options: ?Options, allocator: std.mem.Allocator) CompileError!void {
+    const n_o = if (options != null) options.? else @as(Options, .{});
+    var parmas = try n_o.to_params(allocator);
+    const params_own = try parmas.toOwnedSlice(allocator);
+    defer {
+        for (params_own) |param| {
+            allocator.free(param);
+        }
+        allocator.free(params_own);
+    }
+    const cparams = try allocator.alloc([*]const u8, params_own.len);
+    defer allocator.free(cparams);
+    for (params_own, cparams) |p, *cp| {
+        cp.* = p.ptr;
+    }
+    Error.fromNvrtcErrorCode(nvrtc.nvrtcCompileProgram(prg, std.math.cast(c_int, cparams.len).?, cparams.ptr)) catch |e| {
+        // Print the log for a compilation error, then STILL FAIL. Previously this swallowed
+        // NVRTC_ERROR_COMPILATION and returned success, so the caller went on to read PTX
+        // out of a program that had never compiled.
+        if (e == error.NVRTC_ERROR_COMPILATION) {
+            var log_size: usize = undefined;
+            try Error.fromNvrtcErrorCode(nvrtc.nvrtcGetProgramLogSize(prg, &log_size));
+            const log_msg = try allocator.allocSentinel(u8, log_size, 0);
+            defer allocator.free(log_msg);
+            try Error.fromNvrtcErrorCode(nvrtc.nvrtcGetProgramLog(prg, log_msg.ptr));
+            std.debug.print("{s}\n", .{log_msg});
+        }
+        return e;
+    };
+}
+
+pub fn getPtx(prg: nvrtc.nvrtcProgram, allocator: std.mem.Allocator) CompileError![:0]const u8 {
+    var ptx_size: usize = undefined;
+    try Error.fromNvrtcErrorCode(nvrtc.nvrtcGetPTXSize(prg, &ptx_size));
+
+    var ptx = try std.ArrayList(u8).initCapacity(allocator, ptx_size);
+    ptx.expandToCapacity();
+    try Error.fromNvrtcErrorCode(nvrtc.nvrtcGetPTX(prg, ptx.items.ptr));
+    return try ptx.toOwnedSliceSentinel(allocator, 0);
+}

@@ -1,0 +1,24 @@
+zig-out/
+.zig-cache/
+.vscode/
+run.bat
+build-help/releases.json
+build-help/zig-*
+build-help/*.zip
+build-help/*.tar.xz
+.vsjet/
+prof/
+*.h
+*.cpp
+*.so
+build/
+zig-pkg/
+dev/
+
+# Python packaging (hatchling + ziglang wheel build)
+dist/
+vapoursynth/
+__pycache__/
+*.egg-info/
+*.whl
+*.tar.gz
