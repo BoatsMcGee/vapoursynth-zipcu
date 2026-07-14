@@ -55,17 +55,12 @@ for line in result.stdout.splitlines():
 
 plugin_path = installed_plugin_path()
 
-# Print VapourSynth plugin search paths.
-print(f"vs.core.num_plugins(): {vs.core.num_plugins()}")
-
-core = vs.core
+# Print all loaded plugins for diagnostics.
+print("Plugins loaded:")
+for p in core.plugins():
+    print(f"  namespace={p.namespace} identifier={p.identifier} path={p.plugin_path}")
 
 if not hasattr(core, "vszipcu"):
-    # List what is loaded.
-    print("vszipcu NOT found in vs.core. Plugins loaded:")
-    for i in range(core.num_plugins()):
-        ns = core.get_plugin(i)
-        print(f"  [{i}] id={ns.id} namespace={ns.namespace} file={ns.filepath}")
     sys.exit(f"vszipcu not auto-loaded from installed wheel ({plugin_path})")
 
 print(f"  using installed wheel: {plugin_path}")
